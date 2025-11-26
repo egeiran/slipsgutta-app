@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Linking,
+  Alert,
 } from 'react-native';
-import { Calendar as CalendarIcon, Trash2, Plus, MapPin, Clock } from 'lucide-react-native';
+import { Calendar as CalendarIcon, Trash2, Plus, MapPin, Clock, ExternalLink, PlusCircle } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius, fontSize, shadow } from '../../styles/theme';
 import { SectionHeader } from './shared/SectionHeader';
 import { Modal } from '../ui/Modal';
@@ -24,6 +27,8 @@ type CalendarSectionProps = {
   events: CalendarEvent[];
   profiles: Profile[];
   loading: boolean;
+  lastGoogleFetch: Date | null;
+  currentUserId?: string;
   handlers: CalendarHandlers;
 };
 
@@ -31,17 +36,50 @@ export function CalendarSection({
   events,
   profiles,
   loading,
+  lastGoogleFetch,
+  currentUserId,
   handlers,
 }: CalendarSectionProps) {
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [calendarAdded, setCalendarAdded] = useState(false);
+  const calendarEmbedUrl =
+    'https://calendar.google.com/calendar/embed?src=deusj76c77ctm4g2hvlavmsa3l5793st%40import.calendar.google.com&ctz=Europe%2FOslo';
+  const calendarSubscribeUrl =
+    'https://calendar.google.com/calendar/u/0/r?cid=deusj76c77ctm4g2hvlavmsa3l5793st@import.calendar.google.com';
+  const storageKey = currentUserId ? `@slips_calendar_added_${currentUserId}` : '@slips_calendar_added';
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(storageKey);
+        setCalendarAdded(stored === 'true');
+      } catch {
+        setCalendarAdded(false);
+      }
+    };
+    load();
+  }, [storageKey]);
+
+  const openExternal = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert('Kunne ikke åpne linken', 'Kopier adressen og lim den inn i Safari.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      Alert.alert('Noe gikk galt', 'Prøv igjen om et øyeblikk.');
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('no-NO', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
+      return date.toLocaleDateString('no-NO', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
       minute: '2-digit',
     });
   };
@@ -105,6 +143,91 @@ export function CalendarSection({
           <Plus size={18} color="#ffffff" />
         </Pressable>
       </SectionHeader>
+
+      <View style={styles.googleCard}>
+        <View style={styles.googleCardHeader}>
+          <View>
+            <Text style={styles.googleCardTitle}>Google kalender</Text>
+            <Text style={styles.googleCardSubtitle}>
+              Abonner og se hele oversikten
+            </Text>
+          </View>
+          <View style={styles.googleBadge}>
+            <Text style={styles.googleBadgeText}>Synk</Text>
+          </View>
+        </View>
+
+        <Text style={styles.googleDescription}>
+          Åpne kalenderen i Google for å se alle detaljene, eller legg den til i
+          din egen konto med ett trykk. Fungerer best på iPhone.
+        </Text>
+
+        <View style={styles.googleActions}>
+          <Pressable
+            style={styles.openButton}
+            onPress={() => openExternal(calendarEmbedUrl)}
+          >
+            <ExternalLink size={18} color={colors.info} />
+            <Text style={styles.openButtonText}>Åpne kalender</Text>
+          </Pressable>
+          {!calendarAdded ? (
+            <Pressable
+              style={styles.subscribeButton}
+              onPress={async () => {
+                await openExternal(calendarSubscribeUrl);
+                setCalendarAdded(true);
+                await AsyncStorage.setItem(storageKey, 'true');
+              }}
+            >
+              <PlusCircle size={20} color="#ffffff" />
+              <Text style={styles.subscribeButtonText}>Legg til i min</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={styles.addedButton}
+              onPress={() => {
+                Alert.alert(
+                  'Fjern status?',
+                  'Fjern markeringen for at kalenderen er lagt til?',
+                  [
+                    { text: 'Avbryt', style: 'cancel' },
+                    {
+                      text: 'Fjern',
+                      style: 'destructive',
+                      onPress: async () => {
+                        setCalendarAdded(false);
+                        await AsyncStorage.setItem(storageKey, 'false');
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <PlusCircle size={18} color={colors.success} />
+              <Text style={styles.addedButtonText}>Kalender lagt til!</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {lastGoogleFetch ? (
+          <Text style={styles.googleMeta}>
+            Sist hentet av Google:{' '}
+            {lastGoogleFetch.toLocaleTimeString('nb-NO', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}{' '}
+            {lastGoogleFetch.toLocaleDateString('nb-NO', {
+              day: '2-digit',
+              month: '2-digit',
+            })}{' '}
+            (kan henge opptil 24t)
+          </Text>
+        ) : (
+          <Text style={styles.googleMeta}>
+            Google kan bruke opptil 24 timer på å hente ny data første gang.
+          </Text>
+        )}
+      </View>
 
       {loading && events.length === 0 ? (
         <ActivityIndicator size="large" color={colors.primary} />
@@ -265,6 +388,106 @@ function CalendarFormModal({ visible, onClose, onSubmit, profiles }: CalendarFor
 const styles = StyleSheet.create({
   container: {
     marginBottom: spacing.xl,
+  },
+  googleCard: {
+    backgroundColor: colors.infoBg,
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: `${colors.info}30`,
+  },
+  googleCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  googleCardTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  googleCardSubtitle: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  googleBadge: {
+    backgroundColor: colors.info,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  googleBadgeText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: fontSize.xs,
+  },
+  googleDescription: {
+    fontSize: fontSize.base,
+    color: colors.text,
+    marginBottom: spacing.md,
+    lineHeight: 20,
+  },
+  googleActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  openButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: `${colors.info}40`,
+  },
+  openButtonText: {
+    color: colors.info,
+    fontWeight: '700',
+  },
+  subscribeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.info,
+  },
+  subscribeButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  addedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: `${colors.success}60`,
+  },
+  addedButtonText: {
+    color: colors.success,
+    fontWeight: '700',
+  },
+  googleHint: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  googleMeta: {
+    fontSize: fontSize.xs,
+    color: colors.textTertiary,
   },
   list: {
     gap: spacing.md,

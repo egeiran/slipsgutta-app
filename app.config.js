@@ -20,7 +20,10 @@ export default () => ({
 
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "com.slipsgutta.planner"
+    bundleIdentifier: "com.slipsgutta.planner",
+    infoPlist: {
+      ITSAppUsesNonExemptEncryption: false
+    }
   },
 
   android: {

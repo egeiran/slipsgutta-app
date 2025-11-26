@@ -190,6 +190,8 @@ function PlannerApp({ user, onLogout }: { user: any; onLogout: () => void }) {
           events={planner.calendarEvents}
           profiles={planner.profiles}
           loading={planner.loading}
+          lastGoogleFetch={planner.lastGoogleFetch}
+          currentUserId={user.id}
           handlers={calendarHandlers}
         />
 

@@ -1,6 +1,13 @@
 {
   "expo": {
     "name": "Slipsgutta Planner",
-    "slug": "slipsgutta"
+    "slug": "slipsgutta",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.slipsgutta.planner",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
   }
 }
